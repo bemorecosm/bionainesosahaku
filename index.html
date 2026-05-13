@@ -93,13 +93,14 @@ h1{font-size:22px;font-weight:600;letter-spacing:-.01em;margin:0 0 4px}
 .card{
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
   padding:18px;display:flex;flex-direction:column;gap:12px;transition:border-color .15s,transform .15s;
-  box-shadow:var(--shadow)
+  box-shadow:var(--shadow);
+  content-visibility:auto;contain-intrinsic-size:auto 280px
 }
 .card:hover{border-color:#d8d8d3}
 .card-head{display:flex;gap:12px;align-items:flex-start}
 .card-thumb{
   width:54px;height:54px;flex-shrink:0;border-radius:10px;background:var(--bg);
-  border:1px solid var(--border);background-size:cover;background-position:center
+  border:1px solid var(--border);object-fit:cover;display:block
 }
 .card-title{margin:0;font-size:15px;font-weight:600;letter-spacing:-.005em;line-height:1.3;flex:1;min-width:0}
 .card-title a{color:inherit;text-decoration:none}
@@ -931,10 +932,12 @@ function renderCard(p){
     ? `<a href="${escapeHtml(p.link)}" target="_blank" rel="noopener">${highlight(p.name,q)}</a>`
     : highlight(p.name,q);
   const thumb = p.image
-    ? `<div class="card-thumb" style="background-image:url('${escapeHtml(p.image)}')"></div>` : "";
+    ? `<img class="card-thumb" src="${escapeHtml(p.image)}" alt="" loading="lazy" decoding="async">` : "";
   const catBadge = p.category
     ? `<span style="font-size:11px;color:var(--accent);font-weight:500;letter-spacing:.02em;text-transform:uppercase;margin-top:2px;display:block">${escapeHtml(p.category)}</span>` : "";
 
+  const inciData = encodeURIComponent(p.inci);
+  const flagsData = encodeURIComponent(JSON.stringify(p.flags));
   return `<article class="card">
     <div class="card-head">
       ${thumb}
@@ -944,12 +947,21 @@ function renderCard(p){
       ${warnBadges.map(b=>`<span class="badge warn"><span>${ICONS[b.ico]}</span>${b.label}</span>`).join("")}
       ${goodBadges.map(b=>`<span class="badge good"><span>${ICONS[b.ico]}</span>${b.label}</span>`).join("")}
     </div>
-    <details>
+    <details data-inci="${inciData}" data-flags="${flagsData}">
       <summary></summary>
-      <div class="inci">${renderInci(p.inci,q,p.flags)}</div>
+      <div class="inci"></div>
     </details>
   </article>`;
 }
+
+document.addEventListener("toggle", e => {
+  const d = e.target;
+  if(d.tagName !== "DETAILS" || !d.open || d.dataset.rendered) return;
+  const inci = decodeURIComponent(d.dataset.inci || "");
+  const flags = JSON.parse(decodeURIComponent(d.dataset.flags || "{}"));
+  d.querySelector(".inci").innerHTML = renderInci(inci, state.query.trim(), flags);
+  d.dataset.rendered = "1";
+}, true);
 
 function filtered(){
   const q = state.query.trim().toLowerCase();
