@@ -712,7 +712,6 @@ const FILTERS = [
   { key:"soy",       label:"Soijaton",     ico:"soy",    match:p => !p.flags.soy },
   { key:"sesame",      label:"Seesamiton",       ico:"sesame",     match:p => !p.flags.sesame },
   { key:"compositae", label:"Mykerökukaton",    ico:"flower",     match:p => !p.flags.compositae },
-  { key:"pregnancy", label:"Sopii raskauden aikana", ico:"baby", match:p => !hasPregnancyWarning(p.name) },
 ];
 
 /* ============================================================
@@ -838,11 +837,11 @@ async function load(){
   }
 }
 
-const PREGNANCY_CATEGORY = "Ei suositella raskauden aikana";
+const CAT_PREGNANCY_WARN = "Ei suositella raskauden aikana";
 
 function renderCatChips(){
   const container = document.getElementById("cat-chips");
-  const cats = ["Kaikki", ...Array.from(new Set(state.products.map(p=>p.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"fi")), PREGNANCY_CATEGORY];
+  const cats = ["Kaikki", ...Array.from(new Set(state.products.map(p=>p.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"fi")), CAT_PREGNANCY_WARN];
   container.innerHTML = cats.map(c => `
     <button class="chip" data-cat="${escapeHtml(c)}" aria-pressed="${(state.category===c||(!state.category&&c==='Kaikki'))}">
       ${escapeHtml(c)}
@@ -954,7 +953,7 @@ function renderCard(p){
 function filtered(){
   const q = state.query.trim().toLowerCase();
   return state.products.filter(p=>{
-    if(state.category === PREGNANCY_CATEGORY){
+    if(state.category === CAT_PREGNANCY_WARN){
       if(!hasPregnancyWarning(p.name)) return false;
     } else if(state.category && p.category !== state.category) return false;
     for(const key of state.filters){
