@@ -403,6 +403,8 @@ const INCI_INFO = {
   "pyridoxine hcl":"B6-vitamiini – Tasoittaa ihon kosteustasapainoa",
   "pyridoxine hydrochloride":"B6-vitamiini – Tasoittaa ihon kosteustasapainoa",
   "glycosaminoglycans":"Glykosaminoglykaanit – Sitoo kosteutta, vahvistaa ihosuojaa",
+  "alpha arbutin":"Alfa-arbutiini – Kirkastaa ihoa, tasoittaa pigmenttimuutoksia",
+  "optibright peptide":"Peptidi – Kirkastaa ihoa, tasoittaa ihonväriä",
   "azelaic acid":"Atselaiinihappo – Tasoittaa ihoa, sopii epäpuhtaalle iholle",
   "ammonium lactate":"AHA-hapon ammoniumsuola – Kosteuttaa ja kuorii ihoa",
   "calcium lactate":"Maitohapon kalsiumsuola – Puskuriaine, kosteuttaa",
@@ -688,6 +690,18 @@ const RULES = {
 /* ============================================================
    Suodattimet (chip-painikkeet)
    ============================================================ */
+/* Tuotteet joita ei suositella raskauden ja imetyksen aikana
+   (formuloijan harkinta — kaikkia retinoideja ei automaattisesti varoiteta,
+   sillä useissa tuotteissa pitoisuudet ovat alle huolen rajan). */
+const PREGNANCY_WARNING_PRODUCTS = [
+  "Vitamin A + Antioxidant Complex",
+  "Bio-Replenish A.C.E Repair Cream",
+  "Brightening Renewal Complex",
+];
+function hasPregnancyWarning(name){
+  return PREGNANCY_WARNING_PRODUCTS.some(p => name.includes(p));
+}
+
 const FILTERS = [
   { key:"vegan",     label:"Vegaaninen",   ico:"leaf",   match:p =>  p.flags.vegan },
   { key:"gluten",    label:"Vehnäproteiiniton",  ico:"wheat",  match:p => !p.flags.gluten },
@@ -695,6 +709,7 @@ const FILTERS = [
   { key:"soy",       label:"Soijaton",     ico:"soy",    match:p => !p.flags.soy },
   { key:"sesame",      label:"Seesamiton",       ico:"sesame",     match:p => !p.flags.sesame },
   { key:"compositae", label:"Mykerökukaton",    ico:"flower",     match:p => !p.flags.compositae },
+  { key:"pregnancy", label:"Sopii raskauden aikana", ico:"baby", match:p => !hasPregnancyWarning(p.name) },
 ];
 
 /* ============================================================
@@ -711,6 +726,7 @@ const ICONS = {
   scent: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7c2 0 2 2 4 2s2-2 4-2 2 2 4 2"/><path d="M5 13c2 0 2 2 4 2s2-2 4-2 2 2 4 2"/><path d="M5 19c2 0 2 2 4 2"/></svg>',
   flower:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2a2.5 2.5 0 0 0 0 5 2.5 2.5 0 0 0 0-5z"/><path d="M12 17a2.5 2.5 0 0 0 0 5 2.5 2.5 0 0 0 0-5z"/><path d="M2 12a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0-5 0z"/><path d="M17 12a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0-5 0z"/><path d="M5.6 5.6a2.5 2.5 0 0 0 3.5 3.5A2.5 2.5 0 0 0 5.6 5.6z"/><path d="M14.9 14.9a2.5 2.5 0 0 0 3.5 3.5 2.5 2.5 0 0 0-3.5-3.5z"/><path d="M5.6 18.4a2.5 2.5 0 0 0 3.5-3.5 2.5 2.5 0 0 0-3.5 3.5z"/><path d="M14.9 9.1a2.5 2.5 0 0 0 3.5-3.5 2.5 2.5 0 0 0-3.5 3.5z"/></svg>',
   warn:  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5"/><circle cx="12" cy="18" r=".6" fill="currentColor"/></svg>',
+  baby:  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M9 7h.01"/><path d="M15 7h.01"/><path d="M10 10c.5.5 1.5.5 2 .5s1.5 0 2-.5"/><path d="M8 14c-2 2-3 5-3 7h14c0-2-1-5-3-7"/></svg>',
   check: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-11"/></svg>',
 };
 
@@ -904,6 +920,7 @@ function renderCard(p){
   if(p.flags.sesame)      warnBadges.push({label:"Sisältää seesamia",    ico:"sesame"});
   if(p.flags.compositae)  warnBadges.push({label:"Sisältää mykerökukkia",ico:"flower"});
   if(!p.flags.vegan)      warnBadges.push({label:"Ei vegaaninen",        ico:"warn"});
+  if(hasPregnancyWarning(p.name)) warnBadges.push({label:"Ei raskauden tai imetyksen aikana", ico:"baby"});
 
   const titleHtml = p.link
     ? `<a href="${escapeHtml(p.link)}" target="_blank" rel="noopener">${highlight(p.name,q)}</a>`
