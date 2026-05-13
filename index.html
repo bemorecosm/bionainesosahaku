@@ -979,32 +979,39 @@ function positionTip(el){
   tip.style.top = top + "px";
 }
 function hideTip(){ tip.style.display = "none"; tipTarget = null; }
-document.addEventListener("mouseover", e => {
+// Desktop: hover-kuvaus näkyy (vain hiirellä, ei kosketuksella)
+document.addEventListener("pointerover", e => {
+  if(e.pointerType !== "mouse") return;
   const ing = e.target.closest(".inci-ing.has-info");
   if(ing && ing !== tipTarget){ tipTarget = ing; positionTip(ing); }
 });
-document.addEventListener("mouseout", e => {
+document.addEventListener("pointerout", e => {
+  if(e.pointerType !== "mouse") return;
   const ing = e.target.closest(".inci-ing.has-info");
   if(ing && !ing.classList.contains("open")) hideTip();
 });
+// Näppäimistö-saavutettavuus
 document.addEventListener("focusin", e => {
   const ing = e.target.closest(".inci-ing.has-info");
   if(ing){ tipTarget = ing; positionTip(ing); }
 });
-document.addEventListener("focusout", e => {
+document.addEventListener("focusout", () => {
   if(!document.querySelector(".inci-ing.has-info.open")) hideTip();
 });
-// Tap/click toggling for mobile
+// Mobiili & klikkaus: napautus avaa, uusi napautus muualle sulkee
 document.addEventListener("click", e => {
   const ing = e.target.closest(".inci-ing.has-info");
+  // Sulje muut auki olevat
   document.querySelectorAll(".inci-ing.has-info.open").forEach(el => {
     if(el !== ing) el.classList.remove("open");
   });
   if(ing){
-    e.preventDefault();
-    const isOpen = ing.classList.toggle("open");
-    if(isOpen){ tipTarget = ing; positionTip(ing); } else hideTip();
-  } else hideTip();
+    const willOpen = !ing.classList.contains("open");
+    ing.classList.toggle("open");
+    if(willOpen){ tipTarget = ing; positionTip(ing); } else hideTip();
+  } else {
+    hideTip();
+  }
 });
 window.addEventListener("scroll", () => { if(tipTarget) positionTip(tipTarget); }, true);
 window.addEventListener("resize", () => { if(tipTarget) positionTip(tipTarget); });
