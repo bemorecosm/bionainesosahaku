@@ -1016,6 +1016,23 @@ document.addEventListener("click", e => {
 window.addEventListener("scroll", () => { if(tipTarget) positionTip(tipTarget); }, true);
 window.addEventListener("resize", () => { if(tipTarget) positionTip(tipTarget); });
 
+// Auto-korkeus iframe-emolle (postMessage) — ei sisäistä vieritystä
+let lastSentHeight = 0;
+function sendIframeHeight(){
+  if(window.parent === window) return; // ei iframessä
+  const h = Math.max(
+    document.documentElement.scrollHeight,
+    document.body.scrollHeight
+  );
+  if(Math.abs(h - lastSentHeight) < 5) return;
+  lastSentHeight = h;
+  window.parent.postMessage({type:"bion-iframe-height", height:h}, "*");
+}
+window.addEventListener("load", sendIframeHeight);
+if(window.ResizeObserver){
+  new ResizeObserver(sendIframeHeight).observe(document.body);
+}
+
 function filtered(){
   const q = state.query.trim().toLowerCase();
   return state.products.filter(p=>{
