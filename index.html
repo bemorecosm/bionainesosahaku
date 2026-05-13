@@ -838,9 +838,11 @@ async function load(){
   }
 }
 
+const PREGNANCY_CATEGORY = "Ei suositella raskauden aikana";
+
 function renderCatChips(){
   const container = document.getElementById("cat-chips");
-  const cats = ["Kaikki", ...Array.from(new Set(state.products.map(p=>p.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"fi"))];
+  const cats = ["Kaikki", ...Array.from(new Set(state.products.map(p=>p.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"fi")), PREGNANCY_CATEGORY];
   container.innerHTML = cats.map(c => `
     <button class="chip" data-cat="${escapeHtml(c)}" aria-pressed="${(state.category===c||(!state.category&&c==='Kaikki'))}">
       ${escapeHtml(c)}
@@ -952,7 +954,9 @@ function renderCard(p){
 function filtered(){
   const q = state.query.trim().toLowerCase();
   return state.products.filter(p=>{
-    if(state.category && p.category !== state.category) return false;
+    if(state.category === PREGNANCY_CATEGORY){
+      if(!hasPregnancyWarning(p.name)) return false;
+    } else if(state.category && p.category !== state.category) return false;
     for(const key of state.filters){
       const f = FILTERS.find(x=>x.key===key);
       if(f && !f.match(p)) return false;
