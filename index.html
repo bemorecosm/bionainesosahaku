@@ -1,0 +1,985 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BiON Skincare – Ainesosa- ja allergeenihaku</title>
+
+<!--
+  ===========================================================================
+  ASETUKSET
+  ===========================================================================
+  1) Tee Google Sheet seuraavilla SARAKKEILLA (ensimmäinen rivi otsikkorivi):
+
+       A: Tuote          esim. "Hydrating Serum 30 ml"
+       B: Kategoria      esim. "Seerumit" (dropdown-valikko)
+       C: INCI           esim. "Aqua, Glycerin, Prunus Dulcis Oil, …"
+       D: Linkki         (valinnainen) tuotesivun URL bionskincare.fi:ssä
+       E: Kuva           (valinnainen) tuotekuvan URL
+
+  2) Jaa sheet: Jaa → Yleinen pääsy → "Kaikki linkin omaavat" → Katselija.
+
+  3) Kopioi sheetin URL:sta SHEET_ID ja oikean välilehden GID alle.
+     URL on muotoa
+       https://docs.google.com/spreadsheets/d/<SHEET_ID>/edit#gid=<GID>
+
+  4) Lataa tämä tiedosto omalle palvelimellesi ja upota verkkosivulle:
+       <iframe src="https://sinun.domain/allergeenihaku.html"
+               style="width:100%;height:1200px;border:0" loading="lazy"></iframe>
+
+  Kun päivität sheettiä, muutokset näkyvät täällä välittömästi sivun
+  uudelleenlatauksen jälkeen — ei deployta, ei välivaiheita.
+  ===========================================================================
+-->
+
+<style>
+:root{
+  --bg:#fafaf7;
+  --surface:#ffffff;
+  --text:#1c1c1a;
+  --text-soft:#6c6c66;
+  --border:#ececea;
+  --accent:#8e6fb0;
+  --accent-soft:#efe8f5;
+  --warn:#a85a3d;
+  --warn-soft:#f7e9e1;
+  --radius:14px;
+  --shadow:0 1px 2px rgba(0,0,0,.03),0 4px 12px rgba(0,0,0,.04);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:22px;font-weight:600;letter-spacing:-.01em;margin:0 0 4px}
+.lead{color:var(--text-soft);font-size:14px;line-height:1.5;margin:0 0 22px;max-width:640px}
+
+/* Search */
+.search{position:relative;margin-bottom:14px}
+.search input{
+  width:100%;padding:14px 16px 14px 46px;border:1px solid var(--border);background:var(--surface);
+  border-radius:var(--radius);font-size:15px;font-family:inherit;color:var(--text);
+  outline:none;transition:border-color .15s,box-shadow .15s
+}
+.search input::placeholder{color:#9b9b94}
+.search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.search .ico-search{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:var(--text-soft);pointer-events:none}
+
+/* Filter chips */
+.filter-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 8px}
+.filter-label{font-size:12px;font-weight:600;color:var(--text-soft);white-space:nowrap;letter-spacing:.03em;text-transform:uppercase}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px}
+.chip{
+  display:inline-flex;align-items:center;gap:8px;padding:9px 14px;
+  background:var(--surface);border:1px solid var(--border);border-radius:999px;
+  font-size:13px;font-weight:500;cursor:pointer;color:var(--text);
+  transition:background .15s,border-color .15s,color .15s
+}
+.chip:hover{border-color:#cfcfca}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip[aria-pressed="true"] .chip-ico{color:#fff}
+.chip-ico{color:var(--accent);display:inline-flex}
+.chip-ico svg{display:block}
+.clear-btn{
+  background:none;border:0;color:var(--text-soft);font-size:12.5px;cursor:pointer;
+  padding:6px 4px;text-decoration:underline;text-underline-offset:3px
+}
+.clear-btn:hover{color:var(--text)}
+.controls-bottom{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+
+.meta{font-size:13px;color:var(--text-soft);margin:0}
+
+/* Results grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;margin-top:14px}
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px;display:flex;flex-direction:column;gap:12px;transition:border-color .15s,transform .15s;
+  box-shadow:var(--shadow)
+}
+.card:hover{border-color:#d8d8d3}
+.card-head{display:flex;gap:12px;align-items:flex-start}
+.card-thumb{
+  width:54px;height:54px;flex-shrink:0;border-radius:10px;background:var(--bg);
+  border:1px solid var(--border);background-size:cover;background-position:center
+}
+.card-title{margin:0;font-size:15px;font-weight:600;letter-spacing:-.005em;line-height:1.3;flex:1;min-width:0}
+.card-title a{color:inherit;text-decoration:none}
+.card-title a:hover{color:var(--accent)}
+.badges{display:flex;flex-wrap:wrap;gap:6px}
+.badge{
+  display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;
+  font-size:11.5px;font-weight:500;line-height:1
+}
+.badge svg{width:12px;height:12px;display:block}
+.badge.good{background:var(--accent-soft);color:var(--accent)}
+.badge.warn{background:var(--warn-soft);color:var(--warn)}
+details{margin-top:auto}
+details summary{cursor:pointer;font-size:12.5px;color:var(--text-soft);user-select:none;list-style:none;padding:2px 0}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:"+ Näytä INCI";font-weight:500}
+details[open] summary::before{content:"– Piilota INCI"}
+.inci{
+  margin-top:8px;font-size:11.5px;color:var(--text-soft);line-height:1.55;
+  background:var(--bg);padding:10px 12px;border-radius:8px;
+  white-space:normal;word-break:break-word
+}
+.inci mark{background:#fff5d4;color:var(--text);padding:0 2px;border-radius:3px;font-weight:500}
+.inci strong{color:var(--warn);font-weight:700}
+
+/* Loaders, empty, errors */
+.skeleton{height:148px;border-radius:var(--radius);
+  background:linear-gradient(90deg,#f0f0ec 0%,#f7f7f4 50%,#f0f0ec 100%);background-size:200% 100%;
+  animation:sk 1.4s infinite}
+@keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.empty{text-align:center;color:var(--text-soft);padding:54px 20px;font-size:14px}
+.err{background:#fdecea;border:1px solid #f5c2bb;color:#7a2520;padding:14px 16px;border-radius:var(--radius);font-size:13.5px;line-height:1.55}
+.err code{background:#fff;padding:2px 6px;border-radius:4px;font-size:12px}
+footer{margin-top:36px;font-size:11.5px;color:var(--text-soft);text-align:center}
+
+/* Logo */
+.bion-logo{display:block;max-height:52px;max-width:200px;margin-bottom:18px;object-fit:contain}
+
+/* INCI ingredient tooltips */
+.inci-ing{display:inline;position:relative}
+.inci-ing.has-info{border-bottom:1px dotted #b0a0c0;cursor:help}
+.inci-tip{
+  display:none;position:absolute;z-index:200;
+  bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);
+  background:#1c1c1a;color:#fff;font-size:11px;line-height:1.45;
+  padding:6px 10px;border-radius:7px;width:max-content;max-width:220px;
+  pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.25);white-space:normal
+}
+.inci-tip::after{
+  content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
+  border:5px solid transparent;border-top-color:#1c1c1a
+}
+.inci-ing.has-info:hover .inci-tip{display:block}
+
+/* Disclaimer */
+.disclaimer{
+  display:flex;align-items:flex-start;gap:11px;
+  background:var(--accent-soft);border:1px solid #ddd1ef;
+  border-radius:var(--radius);padding:14px 18px;margin-top:32px;
+  font-size:13px;color:#5a4470;line-height:1.6
+}
+.disclaimer-ico{color:var(--accent);flex-shrink:0;margin-top:2px}
+.disclaimer strong{color:var(--accent);font-weight:600}
+.updated-pill{
+  display:none;align-items:center;gap:6px;
+  background:var(--surface);border:1px solid #d8cde8;border-radius:999px;
+  padding:5px 11px;font-size:11.5px;color:var(--text-soft);margin-top:8px;width:fit-content
+}
+.updated-pill svg{flex-shrink:0;color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <img id="bion-logo" class="bion-logo" src="" alt="BiON Skincare" hidden>
+  <h1>Tuotehaku · ainesosat & allergeenit</h1>
+  <p class="lead">Etsi BiON Skincare -tuotteita tuotenimellä. Valitse suodattimet alta löytääksesi sinulle sopivat tuotteet — esim. vegaaninen, vehnäproteiiniton tai pähkinätön.</p>
+
+  <div class="search">
+    <span class="ico-search"></span>
+    <input id="q" type="search" placeholder="Hae tuotteen nimellä…" autocomplete="off" spellcheck="false">
+  </div>
+
+  <div class="filter-row"><span class="filter-label">Kategoria</span><div class="chips" id="cat-chips"></div></div>
+  <div class="filter-row"><span class="filter-label">Allergeenit</span><div class="chips" id="chips"></div></div>
+  <div class="controls-bottom">
+    <p class="meta" id="meta">Ladataan tuotteita…</p>
+    <button class="clear-btn" id="clear" hidden>Tyhjennä suodattimet</button>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="disclaimer">
+    <span class="disclaimer-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span>
+    <div>
+      <strong>Tarkista aina ajantasaiset ainesosatiedot</strong> maahantuojalta tai tuotepakkauksesta. INCI-koostumus voi muuttua valmistajan toimesta ilman erillistä ilmoitusta.<br>
+      <div class="updated-pill" id="updated-pill">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <span id="updated-time"></span>
+      </div>
+    </div>
+  </div>
+
+  <footer>Ainesosatiedot päivittyvät reaaliaikaisesti Google Sheets -lähteestä.</footer>
+</div>
+
+<script>
+/* ============================================================
+   KONFIGURAATIO — täytä nämä
+   ============================================================ */
+const SHEET_ID = "1uPHW17COirjGFH3svq-YqADnoBRARdeaBNQkt7fZqIw";
+const GID      = "0";   // välilehden gid (URL:n ?gid=… tai #gid=…)
+const LOGO_URL = "https://images.squarespace-cdn.com/content/v1/5fa2a49c57609d783cf716d0/fba3ff00-7137-4258-a93e-dab65404d80a/bionskincare-logo.png?format=1500w";
+
+/* ============================================================
+   INCI-ainesosatietokanta (hover-tooltip)
+   ============================================================ */
+// CosIng-funktioluokkiin pohjautuvat kuvaukset (Euroopan komission virallinen
+// kosmetiikan ainesosatietokanta). Neutraali tekninen kieli, ei terveysväitteitä.
+const INCI_INFO = {
+  // Pohja-ainesosat
+  "water":"Vesi – Tuotteen pohja-ainesosa",
+  "aqua":"Vesi – Tuotteen pohja-ainesosa",
+  "deionized water":"Vesi – Tuotteen pohja-ainesosa (ioneista puhdistettu)",
+  "propanediol":"Kosteuttaa, parantaa ainesosien imeytyvyyttä",
+  "glycerin":"Humektantti – Sitoo kosteutta ja vahvistaa ihosuojaa",
+  "sorbitol":"Sokerialkoholi – Humektantti, sitoo kosteutta ihoon",
+  "sodium hyaluronate":"Hyaluronihaposuola – Sitoo kosteutta tehokkaasti, pehmentää",
+  "hyaluronic acid":"Hyaluronihappo – Sitoo kosteutta, vahvistaa ihosuojaa",
+  "hexylene glycol":"Humektantti, parantaa imeytyvyyttä",
+  "peg-8":"Humektantti, parantaa ainesosien imeytymistä",
+  "isomalt":"Sokeripohjainen humektantti",
+  // Vitamiinit ja johdannaiset
+  "niacinamide":"B3-vitamiini – Tasoittaa ihoa, vahvistaa ihosuojaa, vähentää huokosten näkyvyyttä, säätelee talineritystä",
+  "niacin":"B3-vitamiini – Vahvistaa ihosuojaa ja parantaa vastustuskykyä",
+  "tocopherol":"E-vitamiini – Voimakas antioksidantti, suojaa ihoa hapettumiselta",
+  "tocopheryl acetate":"E-vitamiini – Vakaa muoto, suojaa ihoa hapettumiselta",
+  "ascorbic acid":"C-vitamiini – Antioksidantti, kirkastaa ihoa, tukee kollageenisynteesiä",
+  "ascorbyl palmitate":"C-vitamiini – Öljyliukoinen vakaa muoto, antioksidantti",
+  "magnesium ascorbyl phosphate":"C-vitamiini – Vakaa muoto, antioksidantti, kirkastaa",
+  "panthenol":"Pro-B5-vitamiini – Kosteuttaa, rauhoittaa, edistää ihon uusiutumista",
+  "calcium pantothenate":"Pantoteenihapon kalsiumsuola – Kosteuttaa ja rauhoittaa",
+  "retinol":"A-vitamiini – Stimuloi kollageenisynteesiä, tasoittaa juonteita, uudistaa ihoa",
+  // Hapot / kuorivat
+  "salicylic acid":"BHA-happo – Avaa huokosia, tasoittaa ihoa, sopii epäpuhtaalle iholle",
+  "glycolic acid":"AHA-happo – Tehokkain AHA, uudistaa ihoa ja häivyttää juonteita",
+  "lactic acid":"AHA-happo – Lempeämpi AHA, uudistaa ja kosteuttaa ihoa",
+  "mandelic acid":"AHA-happo – Lempein AHA, sopii herkälle iholle, tasoittaa ihoa",
+  "gluconolactone":"PHA-happo – Lempein kuoriva-happo, kosteuttaa ja vahvistaa ihoa",
+  "citric acid":"Sitruunahappo – pH:n säätäjä, kelaattiaine",
+  // UV-suojat ja mineraalit
+  "zinc oxide":"Sinkkioksidi – Fyysinen UV-suoja (UVA/UVB), rauhoittaa ärtynyttä ihoa",
+  "titanium dioxide":"Titaanidioksidi – Fyysinen UV-suoja (UVB), opasoiva",
+  "zinc gluconate":"Sinkkiyhdiste – Säätelee talineritystä, antibakteerinen",
+  "zinc acetylmethionate":"Sinkkiyhdiste – Antibakteerinen, hillitsee talineritystä",
+  // Muut aktiivit
+  "bisabolol":"Rauhoittaa ärtynyttä ihoa, pehmentää",
+  "allantoin":"Edistää ihon uusiutumista, suojaa ja rauhoittaa",
+  "egcg":"Vihreän teen polyfenoli – Voimakas antioksidantti",
+  "proline":"Aminohappo – Kollageenin pääaminohappo, tukee ihon rakennetta",
+  "alanine":"Aminohappo – Ihon oma kosteustekijä, kosteuttaa",
+  "arginine":"Aminohappo – Tukee kollageenisynteesiä, kosteuttaa",
+  // Emollientit
+  "squalane":"Skvalaani – Ihon oma emollientti, imeytyy nopeasti, ei tuki huokosia",
+  "dimethicone":"Silikoni – Pehmentää ihoa ja muodostaa hengittävän suojakalvon",
+  "caprylic/capric triglyceride":"Kevyt kasviperäinen emollientti, imeytyy hyvin",
+  "coco-caprylate/caprate":"Kevyt emollientti, ei-rasvainen tuntu",
+  "decyl oleate":"Emollientti – Pehmentää ihoa",
+  "ethylhexyl stearate":"Emollientti – Pehmentää ja silottaa ihoa",
+  "ethylhexyl palmitate":"Emollientti – Pehmentää ihoa kevyesti",
+  "c12-15 alkyl benzoate":"Emollientti – Kevyt ja silkkimäinen tuntu",
+  "stearyl heptanoate":"Emollientti – Pehmentää ihoa",
+  "lauryl laurate":"Emollientti – Pehmentää ihoa",
+  "polyhydroxystearic acid":"Emulgaattori – Stabiloi mineraaliaurinkosuojia",
+  "triethoxycaprylylsilane":"Mineraalipigmenttien pinnoite – Parantaa leviävyyttä",
+  "pvp/hexadecene copolymer":"Filmiä muodostava – Parantaa tuotteen pysyvyyttä",
+  // Kasviöljyt ja -voit
+  "butyrospermum parkii":"Sheavoi – Ravitseva emollientti, sisältää triglyseridejä ja antioksidantteja",
+  "mangifera indica":"Mango – Pehmentävä ja kosteuttava kasvivoi",
+  "theobroma cacao":"Kaakao – Suojaava ja ravitseva voi",
+  "theobroma grandiflorum":"Cupuaçu – Voimakas emollientti, sulaa kehon lämmöstä",
+  "persea americana":"Avokado – Ravitseva, sisältää A- ja E-vitamiinia sekä steroleita",
+  "argania spinosa":"Argan – E-vitamiinia ja rasvahappoja, ravitseva",
+  "prunus amygdalus dulcis":"Manteli – Pehmentää ihoa, sisältää E-vitamiinia",
+  "prunus dulcis":"Manteli – Pehmentää ihoa, sisältää E-vitamiinia",
+  "corylus americana":"Hasselpähkinä – Kevyt emollientti, imeytyy hyvin",
+  "corylus avellana":"Hasselpähkinä – Kevyt emollientti, imeytyy hyvin",
+  "juglans regia":"Saksanpähkinä – Antioksidanttipitoinen emollientti",
+  "macadamia ternifolia":"Macadamia – Palmitoleiinihappoa, muistuttaa ihon omaa öljyä",
+  "sesamum indicum":"Seesami – Sesamolia, antioksidantti",
+  "olea europaea":"Oliivi – Skvaleenia ja antioksidantteja, ravitseva",
+  "helianthus annuus":"Auringonkukka – Linolihappoa, vahvistaa ihosuojaa",
+  "carthamus tinctorius":"Saflori – Linolihappopitoinen kevyt emollientti",
+  "limnanthes alba":"Niittyvaahto – Vakaa emollientti, suojaa muita öljyjä hapettumiselta",
+  "vitis vinifera":"Viinirypäle – Linolihappoa ja polyfenoleja",
+  "ribes nigrum":"Mustaherukka – GLA-rasvahappoja, rauhoittaa ihoa",
+  "punica granatum":"Granaattiomena – Antioksidantteja, tukee ihon uusiutumista",
+  "rubus idaeus":"Vadelma – Omega-rasvahappoja ja antioksidantteja",
+  "rosa canina":"Ruusunmarja – A-vitamiinia, tukee ihon uusiutumista",
+  "rosa rubiginosa":"Ruusunmarja – A-vitamiinia ja linolihappoa",
+  "simmondsia chinensis":"Jojoba – Nestemäinen kasvisvaha, muistuttaa ihon omaa sebumia",
+  "cocos nucifera":"Kookos – Lauriinihappoa, ravitseva emollientti",
+  "ricinus communis":"Risiini – Viskoosi öljy, pehmentää ja suojaa",
+  "hydrogenated castor oil":"Risiini – Kiinteyttäjä",
+  "elaeis guineensis":"Öljypalmu – Rasvahappopitoinen emollientti",
+  "avena sativa":"Kaura – Sisältää beta-glukaania, rauhoittaa ärtynyttä ihoa",
+  "triticum vulgare":"Vehnä – E-vitamiinia, ravitseva emollientti",
+  "triticum aestivum":"Vehnä – E-vitamiinia, ravitseva emollientti",
+  // Pinta-aktiiviset aineet
+  "decyl glucoside":"Sokeripohjainen pinta-aktiivinen aine – Lievä puhdistaja",
+  "sodium methyl cocoyl taurate":"Kookospohjainen pinta-aktiivinen aine – Hellä puhdistaja",
+  "cetyl stearyl alcohol":"Kasvirasva-alkoholi – Pehmentää ja stabiloi tuotetta",
+  // Kasvivalmisteet ja uutteet
+  "camellia sinensis":"Vihreä tee – Voimakas antioksidantti (polyfenoli, EGCG), rauhoittaa",
+  "aloe barbadensis":"Aloe vera – Kosteuttaa ja rauhoittaa ärtynyttä ihoa",
+  "centella asiatica":"Gotu kola – Triterpeenit tukevat kollageenia, rauhoittaa ihoa",
+  "calendula officinalis":"Kehäkukka – Rauhoittaa ärtynyttä ihoa",
+  "chamomilla recutita":"Kamomilla – Rauhoittaa ärtynyttä ihoa, antioksidantti",
+  "anthemis nobilis":"Roomalainen kamomilla – Rauhoittaa ihoa",
+  "arnica montana":"Arnikki – Rauhoittaa ärtynyttä ihoa",
+  "rosmarinus officinalis":"Rosmariini – Antioksidantti, antimikrobinen",
+  "salvia officinalis":"Salvia – Antimikrobinen, astringentti",
+  "aesculus hippocastanum":"Hevoskastanja – Vahvistaa pintaverenkiertoa, astringentti",
+  "equisetum arvense":"Peltokorte – Piipitoinen, vahvistaa ihoa",
+  "vaccinium myrtillus":"Mustikka – Antosyaaniantioksidantteja",
+  "salix alba":"Valkopaju – Luonnollinen salisylaattilähde, tasoittaa ihoa",
+  "willowbark":"Paju – Luonnollinen salisylaattilähde, tasoittaa ihoa",
+  "hydrolyzed oat protein":"Kaura – Filmiä muodostava proteiini, kosteuttaa ja rauhoittaa",
+  "citrus grandis":"Greippi – C-vitamiinia ja antioksidantteja",
+  "pyrus malus":"Omena – AHA-happoja ja antioksidantteja",
+  "saccharum officinarum":"Sokeriruoko – AHA-glykolihapon luonnollinen lähde",
+  "glycine soja":"Soija – Isoflavoneja, tukee kollageenisynteesiä",
+  "hydrolyzed soy":"Soija – Pieniksi pilkotut proteiinit, kosteuttaa",
+  "vanilla planifolia":"Vanilja – Antioksidantti",
+  "lavandula angustifolia":"Laventeli – Rauhoittaa ärtynyttä ihoa",
+  "melaleuca alternifolia":"Teepuu – Antibakteerinen, sopii epäpuhtaalle iholle",
+  "eucalyptus globulus":"Eukalyptus – Antimikrobinen, tasoittaa ihoa",
+  "curcuma longa":"Kurkuma – Voimakas antioksidantti (kurkumiini)",
+  "cinnamomum zeylanicum":"Kaneli – Antimikrobinen, astringentti",
+  "cypress leaf oil":"Sypressi – Antibakteerinen, astringentti",
+  "citrus medica":"Sitruuna – Antioksidantti, C-vitamiinia",
+  "citrus aurantifolia":"Limetti – Antioksidantti, antimikrobinen",
+  "citrus aurantium dulcis":"Appelsiini – Antioksidantti, C-vitamiinia",
+  "cananga odorata":"Ylang-ylang – Antimikrobinen, rauhoittaa ihoa",
+  "thymus vulgaris":"Timjami – Antimikrobinen, antioksidantti",
+  "cymbopogon flexuosus":"Sitruunaruoho – Antimikrobinen",
+  "copernicia cerifera":"Karnaubapalmu – Kestävä pintavaha, antaa kiiltoa",
+  "euphorbia cerifera":"Kandelilla – Vegaaninen vaha, antaa kestävyyttä",
+  // Emulgaattorit ja rakenne
+  "glyceryl stearate":"Kasviperäinen emulgaattori – Pehmentää ihoa",
+  "cetearyl alcohol":"Kasvirasva-alkoholi – Pehmentää ja stabiloi tuotetta",
+  "stearyl alcohol":"Kasvirasva-alkoholi – Pehmentää ja stabiloi tuotetta",
+  "cetyl alcohol":"Kasvirasva-alkoholi – Pehmentää ja stabiloi tuotetta",
+  "stearic acid":"Kasviperäinen rasvahappo – Pehmentää ja emulgoi",
+  "ceteareth-15":"Emulgaattori",
+  "polyglyceryl-3 stearate":"Kasviperäinen emulgaattori",
+  "xanthan gum":"Polysakkariidi – Sakeuttaa luonnollisesti",
+  "carbomer":"Polymeerisakeuttaja",
+  "triethanolamine":"pH:n säätäjä",
+  "lecithin":"Soijaperäinen fosfolipidi – Emulgaattori, tukee ihosuojaa",
+  "phosphatidylcholine":"Fosfolipidi – Tukee ihon lipidibarrieeriä",
+  "phospholipids":"Fosfolipidit – Tukevat ihon lipidibarrieeriä",
+  "silica":"Piidioksidi – Mattavaikutus, tekstuurin säätäjä",
+  "mica":"Kiille – Antaa hentoa kiiltoa",
+  "iron oxides":"Rautaoksidipigmentti – Väriaine",
+  // Säilöntäaineet ja apuaineet
+  "phenoxyethanol":"Säilöntäaine",
+  "ethylhexylglycerin":"Ihoa hoitava, säilöntäapuaine",
+  "potassium sorbate":"Säilöntäaine",
+  "sodium benzoate":"Säilöntäaine",
+  "benzyl alcohol":"Säilöntäaine",
+  "caprylyl glycine":"Säilöntäapuaine, ihoa hoitava",
+  "caprylyl glycol":"Säilöntäapuaine ja humektantti",
+  "sodium levulinate":"Säilöntäapuaine",
+  "glyceryl caprylate":"Emulgaattori ja säilöntäapuaine",
+  // Kelaattiaineet
+  "tetrasodium edta":"Kelaattiaine – Parantaa säilöntäaineiden tehoa",
+  "disodium edta":"Kelaattiaine – Sitoo metalleja",
+  "sodium phytate":"Kelaattiaine",
+  // Eläinperäiset
+  "beeswax":"Mehiläisvaha – Suojaava emollientti",
+  "cera alba":"Mehiläisvaha – Suojaava emollientti",
+  "mel":"Hunaja – Humektantti, antibakteerinen",
+  "honey":"Hunaja – Humektantti, antibakteerinen",
+  "lanolin":"Villarasva – Voimakas emollientti, muistuttaa ihon omaa rasvaa",
+  "propolis":"Propolisi – Antibakteerinen ja rauhoittava",
+  "collagen":"Kollageeni – Kosteuttaa ja pehmentää ihoa",
+  "hydrolyzed collagen":"Kollageeni – Pieniksi pilkottu, kosteuttaa ihoa",
+  "royal jelly":"Kuningatarhyytelö – Ravitseva",
+  // Lisävitamiinit ja aktiivit
+  "retinyl palmitate":"A-vitamiini – Lievempi muoto retinolia, uudistaa ihoa",
+  "tetrahexyldecyl ascorbate":"C-vitamiini – Öljyliukoinen vakaa muoto, antioksidantti",
+  "sodium ascorbyl phosphate":"C-vitamiini – Vakaa muoto, antioksidantti, kirkastaa",
+  "l-ascorbic acid":"C-vitamiini – Antioksidantti, kirkastaa ihoa, tukee kollageenia",
+  "alpha lipoic acid":"Alfa-lipoiinihappo – Voimakas antioksidantti",
+  "ferulic acid":"Antioksidantti – Vahvistaa muiden antioksidanttien tehoa",
+  "carnosic acid":"Rosmariinihappo – Antioksidantti",
+  "astaxanthin":"Karotenoidi – Voimakas antioksidantti",
+  "beta-carotene":"Pro-A-vitamiini – Antioksidantti, tukee ihon uusiutumista",
+  "chrysin":"Bioflavonoidi – Antioksidantti, tasoittaa ihoa",
+  "cholecalciferol":"D3-vitamiini – Tukee ihon uusiutumista",
+  "pyridoxine hcl":"B6-vitamiini – Tasoittaa ihon kosteustasapainoa",
+  "pyridoxine hydrochloride":"B6-vitamiini – Tasoittaa ihon kosteustasapainoa",
+  "glycosaminoglycans":"Glykosaminoglykaanit – Sitoo kosteutta, vahvistaa ihosuojaa",
+  "azelaic acid":"Atselaiinihappo – Tasoittaa ihoa, sopii epäpuhtaalle iholle",
+  "ammonium lactate":"AHA-hapon ammoniumsuola – Kosteuttaa ja kuorii ihoa",
+  "calcium lactate":"Maitohapon kalsiumsuola – Puskuriaine, kosteuttaa",
+  "magnesium gluconate":"Magnesiumyhdiste – Ihoa hoitava",
+  "sodium pca":"PCA-natrium – Ihon oma kosteustekijä, sitoo kosteutta",
+  "sodium lactate":"Maitohapon natriumsuola – Ihon oma kosteustekijä",
+  "p-anisic acid":"Säilöntäaine",
+  "caprylic acid":"Rasvahappo – Antimikrobinen",
+  // Peptidit
+  "acetyl hexapeptide-8":"Peptidi – Tasoittaa ilmeurat, tukee ihon kimmoisuutta",
+  "palmitoyl oligopeptide":"Peptidi – Tukee kollageenisynteesiä",
+  "palmitoyl tetrapeptide-7":"Peptidi – Rauhoittaa ihoa, tukee kollageenisynteesiä",
+  "palmitoyl tripeptide-5":"Peptidi – Tukee kollageenisynteesiä",
+  // Aminohapot ja sokerit
+  "glycine":"Aminohappo – Kollageenin pääaminohappo, kosteuttaa",
+  "aspartic acid":"Aminohappo – Kosteuttaa, tukee ihon uusiutumista",
+  "glutamic acid":"Aminohappo – Kosteuttaa, tukee ihon uusiutumista",
+  "histidine":"Aminohappo – Antioksidantti",
+  "isoleucine":"Aminohappo – Tukee ihon uusiutumista",
+  "lysine":"Aminohappo – Kollageenisynteesin avainosa",
+  "valine":"Aminohappo – Tukee ihon uusiutumista",
+  "rice amino acid":"Riisi – Aminohappoja, kosteuttaa ja vahvistaa ihoa",
+  "urea":"Humektantti – Sitoo kosteutta, kuorii hellästi",
+  "mannitol":"Sokerialkoholi – Humektantti, antioksidantti",
+  "sucrose":"Sokeri – Humektantti, kosteuttaa",
+  "fructose":"Hedelmäsokeri – Humektantti, kosteuttaa",
+  "glucose":"Sokeri – Humektantti, kosteuttaa",
+  "maltodextrin":"Tärkkelys – Sideaine, absorbentti",
+  "dextrin":"Tärkkelys – Sideaine",
+  "glycogen":"Hiilihydraatti – Ihon energialähde, kosteuttaa",
+  "beta-glucan":"Polysakkariidi – Sitoo kosteutta, rauhoittaa ja vahvistaa ihoa",
+  "betaglucan":"Polysakkariidi – Sitoo kosteutta, rauhoittaa ja vahvistaa ihoa",
+  "sodium carboxymethyl beta-glucan":"Beta-glukaani – Sitoo kosteutta, rauhoittaa ihoa",
+  // Liuottimet
+  "alcohol":"Liuotin",
+  "propylene glycol":"Humektantti, parantaa imeytyvyyttä",
+  "butylene glycol":"Humektantti, parantaa imeytyvyyttä",
+  "electrolyzed water":"Vesi – Tuotteen pohja-ainesosa (elektrolysoitu)",
+  // Surfaktantit
+  "cocamidopropyl betaine":"Pinta-aktiivinen aine – Hellä puhdistaja",
+  "cocamidopropyl pg-dimonium chloride phosphate":"Pinta-aktiivinen aine – Pehmentää",
+  "coco-glucoside":"Sokeripohjainen pinta-aktiivinen aine – Lievä puhdistaja",
+  "lauryl glucoside":"Sokeripohjainen pinta-aktiivinen aine – Lievä puhdistaja",
+  "cetearyl glucoside":"Kasviperäinen emulgaattori",
+  "cetearyl olivate":"Oliivipohjainen emulgaattori – Pehmentää",
+  "sorbitan olivate":"Oliivipohjainen emulgaattori",
+  "sodium c14-16 olefin sulfonate":"Pinta-aktiivinen aine – Puhdistaja, vaahdottaa",
+  "sodium cocoamphoacetate":"Pinta-aktiivinen aine – Hellä puhdistaja",
+  "sodium lauroyl oat amino acids":"Kauraperäinen pinta-aktiivinen aine – Hellä puhdistaja",
+  "sodium stearoyl lactylate":"Maitohappopohjainen emulgaattori",
+  "sucrose cocoate":"Sokeripohjainen emulgaattori",
+  "laureth-7":"Emulgaattori",
+  "polysorbate 20":"Emulgaattori",
+  "polysorbate 80":"Emulgaattori",
+  "ceteareth-20":"Emulgaattori",
+  "peg-120 methyl glucose dioleate":"Sakeuttaja",
+  "peg-150 distearate":"Emulgaattori, sakeuttaja",
+  "peg-150 pentaerythrityl tetrastearate":"Sakeuttaja",
+  "polyquaternium-7":"Filmiä muodostava – Pehmentää ihoa",
+  "lauryldimonium hydroxypropyl decylglucosides chloride":"Pinta-aktiivinen aine",
+  // Sakeuttajat ja sideaineet
+  "sclerotium gum":"Sienipolysakkariidi – Sakeuttaa, tukee ihosuojaa",
+  "guar gum":"Guarpapu – Polysakkariidisakeuttaja",
+  "cyamopsis tetragonoloba gum":"Guarpapu – Polysakkariidisakeuttaja",
+  "hydroxyethylcellulose":"Selluloosasakeuttaja",
+  "polyacrylamide":"Polymeerisakeuttaja",
+  "polyvinyl alcohol":"Polymeeri – Filmiä muodostava",
+  "amorphophallus konjac root powder":"Konjac – Polysakkariidisakeuttaja",
+  "gelatin":"Sideaine, kosteuttaa ihoa",
+  // Mineraalit ja absorbentit
+  "magnesium aluminum silicate":"Mineraalisavi – Sakeuttaa ja matittaa",
+  "montmorillonite":"Mineraalisavi – Absorboi epäpuhtauksia",
+  "kaolin":"Kaoliinisavi – Imee epäpuhtauksia ja talineritystä",
+  "calcium carbonate":"Kalsiumkarbonaatti – Mattavaikutus",
+  "boron nitride":"Boorinitridi – Silottaa ihoa, opasoiva",
+  "cyclomethicone":"Silikoni – Levittyy helposti, haihtuu iholta",
+  "caprylic/capric triglycerides":"Kevyt kasviperäinen emollientti, imeytyy hyvin",
+  // pH-säätäjät ja kelaattiaineet
+  "potassium hydroxide":"pH:n säätäjä",
+  "sodium hydroxide":"pH:n säätäjä",
+  "potassium alum":"Alunasuola – Astringentti",
+  "phytic acid":"Kelaattiaine – Antioksidanttinen",
+  "tetrasodium glutamate diacetate":"Kelaattiaine",
+  // Säilöntäaineet
+  "chlorphenesin":"Säilöntäaine",
+  "sodium hydroxymethylglycinate":"Säilöntäaine",
+  "dehydroacetic acid":"Säilöntäaine",
+  "sorbic acid":"Säilöntäaine",
+  "capryloyl glycine":"Säilöntäapuaine, ihoa hoitava",
+  // Suolat ja sinkkiyhdisteet
+  "sodium chloride":"Suola – Stabilointiaine",
+  "zinc sulfate":"Sinkkiyhdiste – Astringentti",
+  "zinc glutamate":"Sinkkiyhdiste – Ihoa hoitava",
+  "zinc":"Sinkki – Ihoa hoitava",
+  "sulfur":"Rikki – Antibakteerinen, sopii epäpuhtaalle iholle",
+  "high-purity hypochlorous acid":"Hypokloorihappo – Hellävarainen antimikrobinen",
+  // Värit
+  "chlorophyllin-copper complex":"Klorofylli (lehtivihreä) – Ihoa hoitava (listataan lain mukaan CI 75810)",
+  "chromium oxide greens":"Mineraalipigmentti – Väriaine",
+  // Yleisnimet (samat kuin INCI-nimet)
+  "aloe vera extract":"Aloe vera – Kosteuttaa ja rauhoittaa ärtynyttä ihoa",
+  "aloe vera gel":"Aloe vera – Kosteuttaa ja rauhoittaa ärtynyttä ihoa",
+  "rosemary extract":"Rosmariini – Antioksidantti, antimikrobinen",
+  "tea tree extract":"Teepuu – Antibakteerinen, sopii epäpuhtaalle iholle",
+  "green tea extract":"Vihreä tee – Antioksidantti (polyfenoli, EGCG)",
+  "avocado oil":"Avokado – Ravitseva, sisältää A- ja E-vitamiinia",
+  "sweet almond oil":"Manteli – Pehmentää ihoa, sisältää E-vitamiinia",
+  "safflower oil":"Saflori – Linolihappopitoinen emollientti",
+  "soy lecithin":"Soija – Fosfolipidi, tukee ihosuojaa",
+  "ginseng extract":"Ginseng – Antioksidantti, tukee ihoa",
+  "hops extract":"Humala – Antioksidantti, rauhoittaa ihoa",
+  // Kasvit ja uutteet
+  "panax ginseng root extract":"Ginseng – Antioksidantti, tukee ihon energiatuotantoa",
+  "panax ginseng flower extract":"Ginseng – Antioksidantti, tukee ihoa",
+  "rosa damascena flower extract":"Damaskonruusu – Antioksidantti, rauhoittaa ihoa",
+  "rosa damascena flower water":"Damaskonruusu – Antioksidantti, rauhoittaa ihoa",
+  "camellia oleifera leaf extract":"Teekamelia – Antioksidantti",
+  "hamamelis virginiana extract":"Taikapähkinä – Astringentti, tasoittaa ihoa",
+  "hamamelis virginiana leaf extract":"Taikapähkinä – Astringentti, tasoittaa ihoa",
+  "hamamelis virginiana water":"Taikapähkinä – Astringentti, tasoittaa ihoa",
+  "betula alba bark extract":"Koivu – Astringentti, tasoittaa ihoa",
+  "betula alba extract":"Koivu – Astringentti, tasoittaa ihoa",
+  "betula alba leaf extract":"Koivu – Astringentti, tasoittaa ihoa",
+  "urtica dioica extract":"Nokkonen – Mineraalipitoinen, rauhoittaa ihoa",
+  "tilia cordata flower extract":"Lehmus – Rauhoittaa ihoa",
+  "glycyrrhiza glabra leaf extract":"Lakritsajuuri – Kirkastaa ihoa, rauhoittaa",
+  "glycyrrhiza glabra root extract":"Lakritsajuuri – Kirkastaa ihoa, rauhoittaa",
+  "arctostaphylos uva-ursi fruit extract":"Sianpuolukka – Kirkastaa ihoa (arbutiini)",
+  "daucus carota sativa root extract":"Porkkana – Karotenoideja ja A-vitamiinia",
+  "crithmum maritimum extract":"Meririkko – Mineraaleja, ihoa hoitava",
+  "cucumis sativus fruit extract":"Kurkku – Kosteuttaa ja rauhoittaa ihoa",
+  "ananas sativus fruit extract":"Ananas – Bromelaiinia, hellävaraisesti kuoriva",
+  "passiflora incarnata flower extract":"Kärsimyskukka – Rauhoittaa ihoa",
+  "filipendula ulmaria leaf extract":"Mesiangervo – Salisylaatteja, astringentti",
+  "hedera helix leaf extract":"Muratti – Vahvistaa ihoa, astringentti",
+  "symphytum officinale extract":"Rohtoraunioyrtti – Allantoiinia, rauhoittaa",
+  "symphytum officinale leaf extract":"Rohtoraunioyrtti – Allantoiinia, rauhoittaa",
+  "eclipta prostrata extract":"Valeauringonkukka – Antioksidantti",
+  "melia azadirachta leaf extract":"Neem – Antimikrobinen",
+  "azadirachta indica seed oil":"Neem – Antimikrobinen emollientti",
+  "humulus lupulus extract":"Humala – Antioksidantti, rauhoittaa ihoa",
+  "origanum vulgare leaf extract":"Oregano – Antimikrobinen, antioksidantti",
+  "lonicera japonica flower extract":"Japaninkuusama – Antioksidantti",
+  "lonicera caprifolium flower extract":"Tuoksukuusama – Antioksidantti",
+  "moringa pterygosperma seed oil":"Moringa – Ravitseva emollientti",
+  "prunus armeniaca kernel oil":"Aprikoosi – Kevyt emollientti, sisältää E-vitamiinia",
+  "oenothera biennis oil":"Helokki – GLA-rasvahappoja, rauhoittaa",
+  "cannabis sativa oil":"Hamppu – Omega-rasvahappoja, kosteuttaa",
+  "acer saccharum extract":"Sokerivaahtera – Sisältää luonnollisia AHA-happoja",
+  "pyrus cydonia seed extract":"Kvitteni – Kosteuttaa ja pehmentää",
+  "saccharomyces cerevisiae extract":"Leivinhiiva – Antioksidantti, B-vitamiineja",
+  "spirulina":"Spirulina-levä – Antioksidantti, mineraaleja",
+  "algae extract":"Levä – Mineraaleja, antioksidantti",
+  "laminaria digitata":"Sormilevä – Mineraaleja, kosteuttaa",
+  "laminaria digitata extract":"Sormilevä – Mineraaleja, kosteuttaa",
+  "lithothamnion":"Punalevä – Mineraaleja, sisältää kalsiumia",
+  "seaweed extracts: fucus":"Rakkolevä – Antioksidantti, mineraaleja",
+  "zea mays kernel oil":"Maissi – Linolihappopitoinen emollientti",
+  "zea mays oil":"Maissi – Linolihappopitoinen emollientti",
+  "salix nigra bark extract":"Mustapaju – Luonnollinen salisylaattilähde",
+  "pinus taeda bark extract":"Mänty – Antioksidantti (proantosyaniidit)",
+  "podocarpus totara wood extract":"Totara-puu – Antioksidantti",
+  "hydrolyzed rice bran extract":"Riisileseet – Tasoittaa ihoa, antioksidantti",
+  // Entsyymit ja fermentit
+  "bromelain":"Ananas – Entsyymi, hellävaraisesti kuoriva",
+  "papain":"Papaija – Entsyymi, hellävaraisesti kuoriva",
+  "ficin":"Viikuna – Entsyymi, hellävaraisesti kuoriva",
+  "protease":"Entsyymi – Hellävaraisesti kuoriva",
+  "oxido-reductases":"Entsyymi – Antioksidantti",
+  "pumpkin enzyme ferment":"Kurpitsa – Entsyymeitä, hellävaraisesti kuoriva",
+  "pumpkin puree":"Kurpitsa – Antioksidantteja",
+  "pumpkin seed extract":"Kurpitsa – Antioksidantteja, sinkki ja E-vitamiini",
+  "lactobacillus/pumpkin fruit ferment filtrate":"Kurpitsa – Fermentoitu, antioksidantteja",
+  "lactobacillus/punica granatum fruit ferment extract":"Granaattiomena – Fermentoitu, antioksidantteja",
+  // Eteeriset öljyt ja kasviuutteet (ei käytetä hajusteena BiON-tuotteissa)
+  "natural fragrance":"Eteeriset öljyt – Ihoa hoitavia luonnonöljyjä",
+  "natural fragrance from essential oils":"Eteeriset öljyt – Ihoa hoitavia luonnonöljyjä",
+  "citrus paradisi peel oil":"Greippi – Antioksidantti, C-vitamiinia",
+  "citrus paradisi extract":"Greippi – C-vitamiinia",
+  "citrus aurantium amara peel oil":"Pomeranssi – Antioksidantti",
+  "citrus limon peel oil":"Sitruuna – Antioksidantti, C-vitamiinia",
+  "citrus nobilis peel oil":"Mandariini – Antioksidantti",
+  "citrus reticulata peel oil":"Mandariini – Antioksidantti",
+  "citrus sinensis peel oil":"Appelsiini – Antioksidantti",
+  "mentha piperita oil":"Piparminttu – Mentolia, hellästi viilentävä tuntu",
+  "mentha spicata leaf oil":"Viherminttu – Antimikrobinen",
+  "pelargonium graveolens oil":"Pelargoni – Rauhoittaa ihoa, antimikrobinen",
+  "pelargonium graveolens flower oil":"Pelargoni – Rauhoittaa ihoa, antimikrobinen",
+  "chrysopogon zizanioides root oil":"Vetiveri – Rauhoittaa ihoa",
+  "aniba rosaeodora bark oil":"Brasilian ruusupuu – Rauhoittaa ihoa",
+  "santalum austrocaledonicum oil":"Santelipuu – Antioksidantti, rauhoittaa ihoa",
+  "cinnamon leaf oil":"Kaneli – Antimikrobinen, antioksidantti",
+  "clove leaf oil":"Neilikka – Antimikrobinen (eugenoli)",
+  "tagetes glandulifera flower oil":"Samettikukka – Antioksidantti",
+  "vanillosmopsis erythropappa wood oil":"Candeia-puu – Rauhoittaa ihoa",
+  "cymbopogon schoenanthus extract":"Kamelinheinä – Antimikrobinen",
+  "cymbopogon schoenanthus oil":"Kamelinheinä – Antimikrobinen",
+  "l-menthol":"Mentoli – Viilentävä tuntu",
+  "allyl caproate":"Hedelmäpitoinen yhdiste",
+  "hexyl nicotinate":"B3-vitamiinijohdannainen – Stimuloi mikrokiertoa",
+  "palm stearic acid":"Kasvirasvahappo – Emulgaattori, pehmentää",
+  "oxynex k":"Antioksidanttiseos",
+  "sodium cerotate":"Vahasuola – Stabiloi vahoja",
+};
+
+const INCI_KEYS_SORTED = Object.keys(INCI_INFO).sort((a,b) => b.length - a.length);
+
+function lookupInci(rawName){
+  const core = rawName.replace(/\s*\([^)]*\)/g,'').replace(/\*+/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+  const parens = (rawName.match(/\(([^)]+)\)/g)||[]).map(s=>s.replace(/[()]/g,'').trim().toLowerCase());
+  for(const k of INCI_KEYS_SORTED){
+    if(core===k || core.startsWith(k+' ') || core.startsWith(k+'/')) return INCI_INFO[k];
+  }
+  for(const p of parens){
+    for(const k of INCI_KEYS_SORTED){
+      if(p===k || p.startsWith(k+' ') || p.startsWith(k+'/')) return INCI_INFO[k];
+    }
+  }
+  return null;
+}
+
+/* ============================================================
+   Tunnistussäännöt — INCI-avainsanat per kategoria.
+   Voit lisätä omia avainsanoja huoletta; vertailu on
+   sanaraja-tarkka, ei välitä isoista/pienistä eikä lisäaineiden
+   pitoisuus-merkinnöistä.
+   ============================================================ */
+const RULES = {
+  nuts: [
+    "prunus dulcis","amygdalus dulcis","sweet almond",
+    "corylus avellana","hazelnut",
+    "juglans regia","walnut",
+    "anacardium occidentale","cashew",
+    "pistacia vera","pistachio",
+    "bertholletia excelsa","brazil nut",
+    "macadamia ternifolia","macadamia integrifolia","macadamia",
+    "carya illinoinensis","pecan",
+    "arachis hypogaea","peanut"
+  ],
+  gluten: [
+    "triticum vulgare","triticum aestivum","wheat","hydrolyzed wheat",
+    "triticum spelta","spelt","triticum durum","durum wheat",
+    "hydrolyzed wheat protein","hydrolyzed wheat starch"
+  ],
+  soy: [
+    "glycine soja","glycine max","soy","soybean","soja","hydrolyzed soy"
+  ],
+  sesame: [
+    "sesamum indicum","sesame"
+  ],
+  compositae: [
+    "chamomilla recutita","matricaria","chamomile",
+    "anthemis nobilis","roman chamomile",
+    "calendula officinalis","calendula",
+    "arnica montana","arnica",
+    "helianthus annuus","sunflower seed oil","sunflower oil",
+    "tanacetum annuum","tanacetum parthenium","feverfew",
+    "achillea millefolium","yarrow",
+    "echinacea purpurea","echinacea angustifolia","echinacea pallida","echinacea",
+    "inula helenium","chrysanthemum",
+    "centaurea cyanus","cornflower",
+    "tagetes","marigold"
+  ],
+  // Eläinperäiset INCI-merkinnät → tuote EI ole vegaaninen
+  nonVegan: [
+    "mel","honey",
+    "cera alba","cera flava","beeswax",
+    "lanolin","lanolin alcohol",
+    "carmine","ci 75470","cochineal",
+    "tallow","sodium tallowate",
+    "keratin","hydrolyzed keratin",
+    "collagen","hydrolyzed collagen",
+    "silk","serica","sericin",
+    "snail secretion filtrate",
+    "caprae lac","goat milk",
+    "milk","lactose","casein","whey","lactis",
+    "elastin","hyaluronic acid (animal)",
+    "guanine","ci 75170",
+    "shellac","propolis","royal jelly"
+  ]
+};
+
+/* ============================================================
+   Suodattimet (chip-painikkeet)
+   ============================================================ */
+const FILTERS = [
+  { key:"vegan",     label:"Vegaaninen",   ico:"leaf",   match:p =>  p.flags.vegan },
+  { key:"gluten",    label:"Vehnäproteiiniton",  ico:"wheat",  match:p => !p.flags.gluten },
+  { key:"nuts",      label:"Pähkinätön",   ico:"nut",    match:p => !p.flags.nuts },
+  { key:"soy",       label:"Soijaton",     ico:"soy",    match:p => !p.flags.soy },
+  { key:"sesame",      label:"Seesamiton",       ico:"sesame",     match:p => !p.flags.sesame },
+  { key:"compositae", label:"Mykerökukaton",    ico:"flower",     match:p => !p.flags.compositae },
+];
+
+/* ============================================================
+   Inline-SVG-ikonit (currentColor → mukautuu chip-väriin)
+   ============================================================ */
+const ICONS = {
+  search:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  leaf:  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c0 9-5 16-13 16-2 0-3-1-3-3C4 9 11 4 20 4z"/><path d="M4 20 14 10"/></svg>',
+  wheat: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V8"/><path d="M12 8c0-2 1-4 3-5 0 3-1 5-3 5z"/><path d="M12 12c-2 0-4-1-5-3 3 0 5 1 5 3z"/><path d="M12 12c2 0 4-1 5-3-3 0-5 1-5 3z"/><path d="M12 16c-2 0-4-1-5-3 3 0 5 1 5 3z"/><path d="M12 16c2 0 4-1 5-3-3 0-5 1-5 3z"/><path d="M12 20c-2 0-4-1-5-3 3 0 5 1 5 3z"/><path d="M12 20c2 0 4-1 5-3-3 0-5 1-5 3z"/></svg>',
+  nut:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4c0 2 0 4 4 4s4-2 4-4"/><ellipse cx="12" cy="14" rx="6" ry="8"/><path d="M9 11c1 2 1 4 0 6"/><path d="M15 11c-1 2-1 4 0 6"/></svg>',
+  soy:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5c4 3 4 11 0 14"/><circle cx="10" cy="9" r="2.6"/><circle cx="14" cy="14" r="2.6"/><path d="M19 19c-4-3-4-11 0-14"/></svg>',
+  milk:  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6v3l2 4v10a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V9l2-4z"/><path d="M7 11h10"/><path d="M11 15h2"/></svg>',
+  sesame:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8"  cy="8"  rx="2.4" ry="3.4" transform="rotate(-25 8 8)"/><ellipse cx="16" cy="9"  rx="2.4" ry="3.4" transform="rotate( 25 16 9)"/><ellipse cx="8"  cy="16" rx="2.4" ry="3.4" transform="rotate( 25 8 16)"/><ellipse cx="16" cy="17" rx="2.4" ry="3.4" transform="rotate(-25 16 17)"/></svg>',
+  scent: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7c2 0 2 2 4 2s2-2 4-2 2 2 4 2"/><path d="M5 13c2 0 2 2 4 2s2-2 4-2 2 2 4 2"/><path d="M5 19c2 0 2 2 4 2"/></svg>',
+  flower:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2a2.5 2.5 0 0 0 0 5 2.5 2.5 0 0 0 0-5z"/><path d="M12 17a2.5 2.5 0 0 0 0 5 2.5 2.5 0 0 0 0-5z"/><path d="M2 12a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0-5 0z"/><path d="M17 12a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0-5 0z"/><path d="M5.6 5.6a2.5 2.5 0 0 0 3.5 3.5A2.5 2.5 0 0 0 5.6 5.6z"/><path d="M14.9 14.9a2.5 2.5 0 0 0 3.5 3.5 2.5 2.5 0 0 0-3.5-3.5z"/><path d="M5.6 18.4a2.5 2.5 0 0 0 3.5-3.5 2.5 2.5 0 0 0-3.5 3.5z"/><path d="M14.9 9.1a2.5 2.5 0 0 0 3.5-3.5 2.5 2.5 0 0 0-3.5 3.5z"/></svg>',
+  warn:  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5"/><circle cx="12" cy="18" r=".6" fill="currentColor"/></svg>',
+  check: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-11"/></svg>',
+};
+
+/* ============================================================
+   Pieni CSV-parseri (käsittelee lainausmerkit ja pilkut)
+   ============================================================ */
+function parseCSV(text){
+  const rows=[]; let row=[], cur="", q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++} else q=false } else cur+=c;
+    } else {
+      if(c==='"') q=true;
+      else if(c===","){ row.push(cur); cur="" }
+      else if(c==="\n"){ row.push(cur); rows.push(row); row=[]; cur="" }
+      else if(c==="\r"){/* skip */}
+      else cur+=c;
+    }
+  }
+  if(cur.length||row.length){ row.push(cur); rows.push(row) }
+  return rows;
+}
+
+/* ============================================================
+   INCI-tunnistus
+   ============================================================ */
+function makeMatcher(keywords){
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+  const pattern = "(?:^|[^a-zåäö0-9])(" + keywords.map(esc).join("|") + ")(?:[^a-zåäö0-9]|$)";
+  return new RegExp(pattern,"i");
+}
+const MATCHERS = Object.fromEntries(Object.entries(RULES).map(([k,v])=>[k, makeMatcher(v)]));
+
+function detect(inci){
+  const t = inci.toLowerCase();
+  const flags = {
+    nuts:       MATCHERS.nuts.test(t),
+    gluten:     MATCHERS.gluten.test(t),
+    soy:        MATCHERS.soy.test(t),
+    sesame:     MATCHERS.sesame.test(t),
+    compositae: MATCHERS.compositae.test(t),
+  };
+  flags.vegan = !MATCHERS.nonVegan.test(t);
+  return flags;
+}
+
+/* ============================================================
+   Tila + renderöinti
+   ============================================================ */
+const state = {
+  products: [],
+  filters: new Set(),
+  category: null,
+  query: "",
+};
+
+function csvUrl(){
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${GID}`;
+}
+
+async function load(){
+  const list = document.getElementById("list");
+  list.innerHTML = `<div class="grid">${'<div class="skeleton"></div>'.repeat(6)}</div>`;
+
+  if(!SHEET_ID || SHEET_ID === "PASTE_SHEET_ID_HERE"){
+    list.innerHTML = `<div class="err"><strong>Asetus puuttuu.</strong> Avaa tämä tiedosto editorissa ja täytä <code>SHEET_ID</code> ja <code>GID</code> tiedoston yläosaan (ohjeet HTML-kommentissa).</div>`;
+    document.getElementById("meta").textContent = "";
+    return;
+  }
+
+  try{
+    const res = await fetch(csvUrl(),{cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const text = await res.text();
+    const rows = parseCSV(text).filter(r => r.some(c => c && c.trim()));
+    if(rows.length < 2) throw new Error("Sheet on tyhjä tai vain otsikkorivi");
+    rows.shift(); // poista otsikko
+    state.products = rows.map(r => {
+      const name     = (r[0]||"").trim();
+      const category = (r[1]||"").trim();
+      const inci     = (r[2]||"").trim();
+      const link     = (r[3]||"").trim();
+      const image    = (r[4]||"").trim();
+      return { name, category, inci, link, image, flags: detect(inci) };
+    }).filter(p => p.name && p.inci);
+    renderCatChips();
+    render();
+    const pill = document.getElementById("updated-pill");
+    const timeEl = document.getElementById("updated-time");
+    if(pill && timeEl){
+      const now = new Date();
+      const d = now.toLocaleDateString("fi-FI",{day:"numeric",month:"numeric",year:"numeric"});
+      const t = now.toLocaleTimeString("fi-FI",{hour:"2-digit",minute:"2-digit"});
+      timeEl.textContent = `INCI-tiedot tarkistettu ${d} klo ${t}`;
+      pill.style.display = "inline-flex";
+    }
+  } catch(e){
+    list.innerHTML = `<div class="err">
+      <strong>Tuotteita ei voitu ladata.</strong><br>
+      Tarkista että Google Sheet on jaettu (Jaa → Kaikki linkin omaavat → Katselija)
+      ja että <code>SHEET_ID</code> ja <code>GID</code> ovat oikein.<br><br>
+      Virhe: <code>${e.message}</code>
+    </div>`;
+    document.getElementById("meta").textContent = "";
+  }
+}
+
+function renderCatChips(){
+  const container = document.getElementById("cat-chips");
+  const cats = ["Kaikki", ...Array.from(new Set(state.products.map(p=>p.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"fi"))];
+  container.innerHTML = cats.map(c => `
+    <button class="chip" data-cat="${escapeHtml(c)}" aria-pressed="${(state.category===c||(!state.category&&c==='Kaikki'))}">
+      ${escapeHtml(c)}
+    </button>`).join("");
+  container.querySelectorAll(".chip").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const k = btn.dataset.cat;
+      state.category = (k === "Kaikki" || state.category === k) ? null : k;
+      render();
+    });
+  });
+}
+
+function renderChips(){
+  const container = document.getElementById("chips");
+  container.innerHTML = FILTERS.map(f => `
+    <button class="chip" data-key="${f.key}" aria-pressed="${state.filters.has(f.key)}">
+      <span class="chip-ico">${ICONS[f.ico]}</span>${f.label}
+    </button>`).join("");
+  container.querySelectorAll(".chip").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const k = btn.dataset.key;
+      if(state.filters.has(k)) state.filters.delete(k); else state.filters.add(k);
+      render();
+    });
+  });
+}
+
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])) }
+
+function highlight(text, query){
+  if(!query) return escapeHtml(text);
+  const esc = query.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+  const re = new RegExp("("+esc+")","ig");
+  return escapeHtml(text).replace(re,'<mark>$1</mark>');
+}
+
+function renderInci(inci, query, flags){
+  const parts = inci.split(/,\s*/);
+  return parts.map(ing => {
+    let r = escapeHtml(ing.trim());
+    const cats = ['nuts','gluten','soy','sesame','compositae'];
+    for(const cat of cats){
+      if(!flags[cat]) continue;
+      for(const kw of RULES[cat]){
+        const e = kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+        r = r.replace(new RegExp('(?<![a-zA-Zåäö0-9])('+e+')(?![a-zA-Zåäö0-9])','gi'),'<strong>$1</strong>');
+      }
+    }
+    if(!flags.vegan){
+      for(const kw of RULES.nonVegan){
+        const e = kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+        r = r.replace(new RegExp('(?<![a-zA-Zåäö0-9])('+e+')(?![a-zA-Zåäö0-9])','gi'),'<strong>$1</strong>');
+      }
+    }
+    if(query){
+      const e = query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+      r = r.replace(new RegExp('('+e+')','gi'),'<mark>$1</mark>');
+    }
+    const info = lookupInci(ing.trim());
+    if(info) return `<span class="inci-ing has-info">${r}<span class="inci-tip">${escapeHtml(info)}</span></span>`;
+    return `<span class="inci-ing">${r}</span>`;
+  }).join(', ');
+}
+
+function renderCard(p){
+  const q = state.query.trim();
+  const goodBadges = [];
+  const warnBadges = [];
+  if(p.flags.vegan) goodBadges.push({label:"Vegaaninen", ico:"leaf"});
+  if(!p.flags.gluten) goodBadges.push({label:"Vehnäproteiiniton", ico:"wheat"});
+  if(!p.flags.nuts) goodBadges.push({label:"Pähkinätön", ico:"nut"});
+  if(!p.flags.soy) goodBadges.push({label:"Soijaton", ico:"soy"});
+  if(!p.flags.sesame)     goodBadges.push({label:"Seesamiton",     ico:"sesame"});
+  if(!p.flags.compositae) goodBadges.push({label:"Mykerökukaton",  ico:"flower"});
+
+  if(p.flags.nuts)        warnBadges.push({label:"Sisältää pähkinää tai manteliperäisiä",    ico:"nut"});
+  if(p.flags.gluten)      warnBadges.push({label:"Sisältää vehnäperäisiä ainesosia", ico:"wheat"});
+  if(p.flags.soy)         warnBadges.push({label:"Sisältää soijaa",      ico:"soy"});
+  if(p.flags.sesame)      warnBadges.push({label:"Sisältää seesamia",    ico:"sesame"});
+  if(p.flags.compositae)  warnBadges.push({label:"Sisältää mykerökukkia",ico:"flower"});
+  if(!p.flags.vegan)      warnBadges.push({label:"Ei vegaaninen",        ico:"warn"});
+
+  const titleHtml = p.link
+    ? `<a href="${escapeHtml(p.link)}" target="_blank" rel="noopener">${highlight(p.name,q)}</a>`
+    : highlight(p.name,q);
+  const thumb = p.image
+    ? `<div class="card-thumb" style="background-image:url('${escapeHtml(p.image)}')"></div>` : "";
+  const catBadge = p.category
+    ? `<span style="font-size:11px;color:var(--accent);font-weight:500;letter-spacing:.02em;text-transform:uppercase;margin-top:2px;display:block">${escapeHtml(p.category)}</span>` : "";
+
+  return `<article class="card">
+    <div class="card-head">
+      ${thumb}
+      <div style="flex:1;min-width:0"><h3 class="card-title">${titleHtml}</h3>${catBadge}</div>
+    </div>
+    <div class="badges">
+      ${warnBadges.map(b=>`<span class="badge warn"><span>${ICONS[b.ico]}</span>${b.label}</span>`).join("")}
+      ${goodBadges.map(b=>`<span class="badge good"><span>${ICONS[b.ico]}</span>${b.label}</span>`).join("")}
+    </div>
+    <details>
+      <summary></summary>
+      <div class="inci">${renderInci(p.inci,q,p.flags)}</div>
+    </details>
+  </article>`;
+}
+
+function filtered(){
+  const q = state.query.trim().toLowerCase();
+  return state.products.filter(p=>{
+    if(state.category && p.category !== state.category) return false;
+    for(const key of state.filters){
+      const f = FILTERS.find(x=>x.key===key);
+      if(f && !f.match(p)) return false;
+    }
+    if(q){
+      const hay = (p.name + " " + p.category + " " + p.inci).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function render(){
+  document.querySelectorAll("#chips .chip").forEach(c=>{
+    c.setAttribute("aria-pressed", state.filters.has(c.dataset.key));
+  });
+  document.querySelectorAll("#cat-chips .chip").forEach(c=>{
+    c.setAttribute("aria-pressed", (!state.category && c.dataset.cat==="Kaikki") || state.category===c.dataset.cat);
+  });
+  const items = filtered();
+  const meta = document.getElementById("meta");
+  meta.textContent = `${items.length} / ${state.products.length} tuotetta`;
+  document.getElementById("clear").hidden = state.filters.size === 0 && !state.query && !state.category;
+
+  const list = document.getElementById("list");
+  if(items.length === 0){
+    list.innerHTML = `<div class="empty">Ei tuloksia näillä suodattimilla. Kokeile tyhjentää suodattimet tai muuttaa hakua.</div>`;
+  } else {
+    list.innerHTML = `<div class="grid">${items.map(renderCard).join("")}</div>`;
+  }
+}
+
+/* ============================================================
+   Käynnistys
+   ============================================================ */
+document.querySelector(".ico-search").innerHTML = ICONS.search;
+renderChips();
+document.getElementById("q").addEventListener("input", e => { state.query = e.target.value; render() });
+document.getElementById("clear").addEventListener("click", () => {
+  state.filters.clear();
+  state.category = null;
+  state.query = "";
+  document.getElementById("q").value = "";
+  render();
+});
+if(LOGO_URL){ const l=document.getElementById("bion-logo"); l.src=LOGO_URL; l.removeAttribute("hidden"); }
+load();
+</script>
+</body>
+</html>
